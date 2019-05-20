@@ -18,6 +18,9 @@ Load the cornell movie dialog corpus.
 Available from here:
 http://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html
 
+This code was originally taken from
+https://raw.githubusercontent.com/floydhub/textutil-preprocess-cornell-movie-corpus/master/cornelldata.py
+(and modified.)
 """
 
 def loadLines(fileName, fields):
