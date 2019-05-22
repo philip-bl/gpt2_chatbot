@@ -130,7 +130,7 @@ def get_model(args, device):
     #torchsummary.summary(model, (args.context_length, vocab_size), args.train_batch_size)
     model.to(device)
     if args.dataparallel:
-        model = nn.DataParallel(model)
+        model = nn.DataParallel(model, device_ids=[6, 7, 8, 9])
     else:
         model.to(device)
     return model
