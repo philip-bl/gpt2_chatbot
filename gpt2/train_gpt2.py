@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 """Taken from https://raw.githubusercontent.com/cybertronai/bflm/1cc3c8ab43a1cb651882a00766f82f7440ef739f/train_gpt2.py"""
 
 import argparse
@@ -9,6 +6,7 @@ import os
 import time
 
 import torch
+import torch.nn as nn
 import tqdm
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
@@ -130,7 +128,13 @@ def get_model(args, device):
         model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
     #import torchsummary
     #torchsummary.summary(model, (args.context_length, vocab_size), args.train_batch_size)
-    return model.to(device)
+    model.to(device)
+    if args.dataparallel:
+        model = nn.DataParallel(model)
+    else:
+        model.to(device)
+    return model
+
 
 def main():
     global global_example_count, event_writer
@@ -161,6 +165,7 @@ def main():
     parser.add_argument('--min_file_len', type=int, help="When loading dataset, throw out files with fewer than this many characters")
     parser.add_argument('--max_file_len', type=int, help="When loading dataset, throw out files with greater than this many characters")
     parser.add_argument('--scratch', action='store_true', help='Don\'t start with pretrained model, train from scratch')
+    parser.add_argument('--dataparallel', action='store_true')
 
     args = parser.parse_args()
     assert args.do_train or args.do_eval or args.do_find_lr, "Specify at least one of do_train or do_eval or do_find_lr"
