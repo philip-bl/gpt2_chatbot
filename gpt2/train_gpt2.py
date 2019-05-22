@@ -64,10 +64,9 @@ def find_lr(args, data_loader, model, device, optimizer, init_value = 1e-8, fina
         batch_num += 1
         batch = batch.to(device)
         loss = model(batch, lm_labels=batch)
-        if not args.dataparallel:
-            loss.backward()
-        else:
-            loss.sum().backward()
+        if args.dataparallel:
+            loss = loss.mean()
+        loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         #Compute the smoothed loss
@@ -216,10 +215,9 @@ def main():
                     model.train()
                     batch = batch.to(device)
                     loss = model(batch, lm_labels=batch)
-                    if not args.dataparallel:
-                        loss.backward()
-                    else:
-                        loss.sum().backward()
+                    if args.dataparallel:
+                        loss = loss.mean()
+                    loss.backward()
                     optimizer.step()
                     optimizer.zero_grad()
                     tr_loss += loss.item()
