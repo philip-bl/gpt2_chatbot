@@ -73,7 +73,7 @@ def get_data_loader(dataset_path, enc, batch_size, args, verbose=True):
     if verbose:
         print(f'loaded {len(data)} tokens, {len(ds)} samples')
         decoded = enc.decode(ds[0])
-        print('data sample:', decoded[:100])
+        print('data sample:', decoded)
         print('batch shape:', next(iter(data_loader)).shape)
 
     assert len(data_loader) > 1, "added by phil"

@@ -225,7 +225,7 @@ def main():
                 model, enc, args,
                 # Context is a random sample from the dataset.
                 context_tokens=next(iter(data_loader)),
-                batch_size=1, length=20, nsamples=1,
+                batch_size=1, length=256, nsamples=1,
                 temperature=1, top_k=40)
             event_writer.add_text('sample', sample, global_example_count)
             checkpoint(model, args)
