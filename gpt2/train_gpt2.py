@@ -45,7 +45,7 @@ def current_timestamp() -> str:
     time_str = time.strftime('%Y-%m-%d_%H-%M-%S', time.localtime(current_seconds))
     return time_str
 
-def find_lr(data_loader, model, device, optimizer, init_value = 1e-8, final_value=10., beta = 0.98):
+def find_lr(args, data_loader, model, device, optimizer, init_value = 1e-8, final_value=10., beta = 0.98):
     """Find a learning rate for this model using a batch.
 
     Based on https://sgugger.github.io/how-do-you-find-a-good-learning-rate.html
@@ -182,7 +182,7 @@ def main():
     if args.do_find_lr:
         data_loader = get_data_loader(args.train_dataset, enc, args.train_batch_size, args)
         optimizer = get_optimizer(model, args, data_loader)
-        find_lr(data_loader, model, device, optimizer)
+        find_lr(args, data_loader, model, device, optimizer)
         # Restart from checkpoint.
         model = get_model(args, device)
 
