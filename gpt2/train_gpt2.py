@@ -64,7 +64,10 @@ def find_lr(args, data_loader, model, device, optimizer, init_value = 1e-8, fina
         batch_num += 1
         batch = batch.to(device)
         loss = model(batch, lm_labels=batch)
-        loss.backward()
+        if not args.dataparallel:
+            loss.backward()
+        else:
+            loss.sum().backward()
         optimizer.step()
         optimizer.zero_grad()
         #Compute the smoothed loss
@@ -228,13 +231,13 @@ def main():
         except KeyboardInterrupt:
             tqdm_bar.close()
         finally:
-            sample = print_samples(
-                model, enc, args,
-                # Context is a random sample from the dataset.
-                context_tokens=next(iter(data_loader)),
-                batch_size=1, length=256, nsamples=1,
-                temperature=1, top_k=40)
-            event_writer.add_text('sample', sample, global_example_count)
+            # sample = print_samples(
+            #     model, enc, args,
+            #     # Context is a random sample from the dataset.
+            #     context_tokens=next(iter(data_loader)),
+            #     batch_size=1, length=256, nsamples=1,
+            #     temperature=1, top_k=40)
+            # event_writer.add_text('sample', sample, global_example_count)
             checkpoint(model, args)
 
     if args.do_eval:
