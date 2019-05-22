@@ -156,7 +156,7 @@ def main():
     parser.add_argument('--optimizer', type=str, default='openai', help='Which optimizer to use: {openai, adam}')
     parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
     parser.add_argument('--weight_decay', type=float, default=0.01)
-    parser.add_argument('--run_name', type=str, default='', help="Name of this run for easier tensorboard analysis")
+    parser.add_argument('--run_name', type=str, default='unknown', help="Name of this run for easier tensorboard analysis")
     parser.add_argument('--logdir',type=str, default='/tmp/runs', help="location of logging directory")
     parser.add_argument('--min_file_len', type=int, help="When loading dataset, throw out files with fewer than this many characters")
     parser.add_argument('--max_file_len', type=int, help="When loading dataset, throw out files with greater than this many characters")
@@ -165,6 +165,7 @@ def main():
     args = parser.parse_args()
     assert args.do_train or args.do_eval or args.do_find_lr, "Specify at least one of do_train or do_eval or do_find_lr"
     args.logdir = f'{args.logdir}/{args.run_name}-{get_now_as_str()}'
+    args.output_dir = args.logdir
     os.system(f'mkdir -p {args.logdir}')
 
     torch.random.manual_seed(args.seed)
