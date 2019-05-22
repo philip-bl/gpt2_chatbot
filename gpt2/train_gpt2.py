@@ -166,6 +166,7 @@ def main():
     parser.add_argument('--max_file_len', type=int, help="When loading dataset, throw out files with greater than this many characters")
     parser.add_argument('--scratch', action='store_true', help='Don\'t start with pretrained model, train from scratch')
     parser.add_argument('--dataparallel', action='store_true')
+    parser.add_argument('--cuda_device', type=int, default=6)
 
     args = parser.parse_args()
     assert args.do_train or args.do_eval or args.do_find_lr, "Specify at least one of do_train or do_eval or do_find_lr"
@@ -175,7 +176,7 @@ def main():
 
     torch.random.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{args.cuda_device}" if torch.cuda.is_available() else "cpu")
     args.device = device
 
     # Hard code tokenizer path
