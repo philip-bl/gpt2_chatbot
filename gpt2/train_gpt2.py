@@ -216,7 +216,10 @@ def main():
                     model.train()
                     batch = batch.to(device)
                     loss = model(batch, lm_labels=batch)
-                    loss.backward()
+                    if not args.dataparallel:
+                        loss.backward()
+                    else:
+                        loss.sum().backward()
                     optimizer.step()
                     optimizer.zero_grad()
                     tr_loss += loss.item()
