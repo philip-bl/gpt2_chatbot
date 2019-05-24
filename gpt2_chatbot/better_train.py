@@ -83,7 +83,7 @@ def get_optimizer(
     return optimizer
 
 
-def setup_trainer(model, optimizer, device) -> Engine:
+def setup_trainer(model, optimizer, device, data_parallel: bool) -> Engine:
     def update(trainer, batch: Tuple[torch.Tensor]):
         model.train()
         optimizer.zero_grad()
@@ -93,10 +93,17 @@ def setup_trainer(model, optimizer, device) -> Engine:
         else:
             assert isinstance(batch, torch.Tensor)
         batch = batch.to(device)
-        masked_batch = mask_for_forward(batch) # replace -1 with some other token
-        lm_logits = model(masked_batch)[0]
-        loss = calculate_lm_loss(lm_logits, batch)
-        loss.backward()
+        if not data_parallel:
+            masked_batch = mask_for_forward(batch) # replace -1 with some other token
+            lm_logits = model(masked_batch)[0]
+            loss = calculate_lm_loss(lm_logits, batch)
+            loss.backward()
+        else:
+            # handling of -1 as padding is not implemented
+            losses = model(batch, lm_labels=batch)
+            assert losses.shape == (torch.cuda.device_count(), )
+            losses.backward(torch.ones_like(losses))
+            loss = losses.mean()
         optimizer.step()
         return loss.item()
     trainer = Engine(update)
@@ -135,8 +142,8 @@ def log_unconditional_samples(
     arrays_as_strings = (str(arr) for arr in array)
     texts = (tokenizer.decode(arr) for arr in array)
     sample_headers = (f"\n# Sample {i}\n" for i in range(num_samples))
-    text_header = "## Text\n```"
-    array_header = "\n```\n## Array of tokens\n"
+    text_header = "## Text\n\n"
+    array_header = "\n## Array of tokens\n"
     string_to_log = "".join(
         "".join(tuple_)
         for tuple_ in zip(
@@ -214,6 +221,7 @@ def debug_memory_leak():
 @click.option("--dataset-cache-dir", type=click.Path(), required=False)
 @click.option("--train-batch-size", type=int, default=24)
 @click.option("--train-sequence-length", type=int, default=512)
+@click.option("--model-path", type=click.Path(dir_okay=False, exists=True))
 @click_log.simple_verbosity_option(logger)
 def main(
     cuda: bool, data_parallel: bool, logs_dir: str, checkpoints_dir: str,
@@ -222,7 +230,8 @@ def main(
     sampling_sequence_length: int, sampling_num_samples: int,
     sampling_temperature: float, sampling_top_k: int,
     dataset_path: str, dataset_cache_dir: Optional[str],
-    train_batch_size: int, train_sequence_length: int
+    train_batch_size: int, train_sequence_length: int,
+    model_path: Optional[str]
 ) -> None:
     main_device = torch.device("cuda") if cuda else torch.device("cpu")
     if data_parallel:
@@ -230,24 +239,28 @@ def main(
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     if dataset_cache_dir is None:
         dataset_cache_dir = mkdtemp()
-    # data_loader = get_data_loader(
-    #     dataset_path, tokenizer, train_batch_size,
-    #     make_args(train_sequence_length, dataset_cache_dir),
-    #     verbose=False
-    # )
-    texts = [
-         "Hello world! Oh, what a sunny",
-        "I hate this dog. I hate all the dogs. Oh how I would love to kill all the"
-    ]
-    batch = encode_many_texts(tokenizer, texts)
-    dataset = TensorDataset(batch)
-    data_loader = DataLoader(dataset, batch_size=2)
-    model = GPT2LMHeadModel.from_pretrained("gpt2").to(main_device)
+    data_loader = get_data_loader(
+        dataset_path, tokenizer, train_batch_size,
+        make_args(train_sequence_length, dataset_cache_dir),
+        verbose=False
+    )
+    # texts = [
+    #      "Hello world! Oh, what a sunny",
+    #     "I hate this dog. I hate all the dogs. Oh how I would love to kill all the"
+    # ]
+    # batch = encode_many_texts(tokenizer, texts)
+    # dataset = TensorDataset(batch)
+    # data_loader = DataLoader(dataset, batch_size=2)
+    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    if model_path:
+        state_dict = torch.load(model_path)
+        model.load_state_dict(torch.load(model_path, map_location=main_device))
+    model.to(main_device)
     if data_parallel:
         model = nn.DataParallel(model)
     optimizer = get_optimizer(model, data_loader, num_epochs, learning_rate)
     
-    trainer = setup_trainer(model, optimizer, main_device)
+    trainer = setup_trainer(model, optimizer, main_device, data_parallel)
     checkpointer = ModelCheckpoint(
         logs_dir, save_interval=checkpoint_every_num_iterations,
         require_empty=False,
