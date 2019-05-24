@@ -177,6 +177,17 @@ def make_args(sequence_length: int, output_dir: str) -> Args:
     )
 
 
+def debug_memory_leak():
+    import torch
+    import gc
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                print(type(obj), obj.size())
+        except:
+            pass
+
+
 @click.command()
 @click_log.simple_verbosity_option(logger)
 @click.option("--cuda/--no-cuda", default=True)
