@@ -4,8 +4,6 @@ from pytorch_pretrained_bert import GPT2Tokenizer
 
 class my_dataset(torch.utils.data.Dataset):
     def __init__(self, path_data, path_model, seq_lenth = 512 ):
-        self.args = args
-        self.combine = combine
         self.enc = GPT2Tokenizer.from_pretrained(path_model)
         
         with open(path, 'r') as fp:
