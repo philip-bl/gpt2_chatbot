@@ -9,9 +9,10 @@ import torch.nn.functional as tnnf
 from torch.utils.data import TensorDataset, DataLoader
 
 from ignite.engine import Engine, Events
-from ignite.handlers import TerminateOnNan
+from ignite.handlers import TerminateOnNan, ModelCheckpoint
 from ignite.contrib.handlers import TensorboardLogger, CustomPeriodicEvent
 
+from libcrap import get_now_as_str
 from libcrap.torch.training import setup_tensorboard_logger
 
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
@@ -150,12 +151,12 @@ def setup_unconditional_sampling(
         )
 
 
-
 if __name__ == "__main__":
-    main_device = torch.device("cuda")
+    main_device = torch.device("cpu")
     num_epochs = 20
     logs_base_dir = "."
     sample_every_num_iterations = 9
+    checkpoint_every_num_iterations = sample_every_num_iterations
 
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     texts = [
@@ -170,6 +171,16 @@ if __name__ == "__main__":
     optimizer = get_optimizer(model, data_loader, num_epochs, 5e-5)
     
     trainer = setup_trainer(model, optimizer, main_device)
+    checkpointer = ModelCheckpoint(
+        logs_base_dir, save_interval=checkpoint_every_num_iterations,
+        require_empty=False,
+        filename_prefix=f"gpt2_{get_now_as_str(year=True)}",
+        n_saved=10**10
+    )
+    trainer.add_event_handler(
+        Events.ITERATION_COMPLETED, checkpointer,
+        {"model": model}
+    )
     with setup_tensorboard_logger(
         logs_base_dir, trainer, model=model, metric_names=()
     ) as tb_logger:
