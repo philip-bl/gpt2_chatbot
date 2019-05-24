@@ -163,21 +163,31 @@ def setup_unconditional_sampling(
 @click_log.simple_verbosity_option(logger)
 @click.option("--cuda/--no-cuda", default=True)
 @click.option("--data-parallel/--no-data-parallel", default=True)
-@click.option("--logs-dir", "-l",
+@click.option("--logs-dir",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
     default="."
 )
-@click.option("--checkpoints-dir", "-c",
+@click.option("--checkpoints-dir",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
     default="."
 )
-@click.option("--num-epochs", "-n", type=int, default=100)
-@click.option("--sample-every-num-iterations", "-s", type=int, default=200)
-@click.option("--checkpoint-every-num-iterations", "-C", type=int, default=1500)
+@click.option("--num-epochs", type=int, default=100)
+@click.option("--checkpoint-every-num-iterations", type=int, default=1500)
+@click.option("--learning-rate", type=float, default=5e-5)
+@click.option("--sample-every-num-iterations", type=int, default=200)
+@click.option("--sampling-sequence-length", type=int, default=256)
+@click.option("--sampling-num-samples", type=int, default=4)
+@click.option(
+    "--sampling-temperature", type=float, default=1.0,
+    help="""See https://www.gwern.net/GPT-2 ctrl+f temperature."""
+)
+@click.option("--sampling-top-k", type=int, default=30)
 def main(
     cuda: bool, data_parallel: bool, logs_dir: str, checkpoints_dir: str,
     num_epochs: int, sample_every_num_iterations: int,
-    checkpoint_every_num_iterations: int
+    checkpoint_every_num_iterations: int, learning_rate: float,
+    sampling_sequence_length: int, sampling_num_samples: int,
+    sampling_temperature: float, sampling_top_k: int
 ) -> None:
     main_device = torch.device("cuda") if cuda else torch.device("cpu")
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
@@ -190,7 +200,7 @@ def main(
     data_loader = DataLoader(dataset, batch_size=2)
     model = GPT2LMHeadModel.from_pretrained("gpt2").to(main_device)
     model = nn.DataParallel(model)
-    optimizer = get_optimizer(model, data_loader, num_epochs, 5e-5)
+    optimizer = get_optimizer(model, data_loader, num_epochs, learning_rate)
     
     trainer = setup_trainer(model, optimizer, main_device)
     checkpointer = ModelCheckpoint(
@@ -209,7 +219,8 @@ def main(
         setup_unconditional_sampling(
             tb_logger=tb_logger, tokenizer=tokenizer, model=model,
             device=main_device,
-            num_samples=2, sequence_length=256, temperature=1.0, top_k=40,
+            num_samples=sampling_num_samples, sequence_length=sampling_sequence_length,
+            temperature=sampling_temperature, top_k=sampling_top_k,
             trainer=trainer, every_num_iterations=sample_every_num_iterations
         )
         trainer.run(data_loader, num_epochs)
