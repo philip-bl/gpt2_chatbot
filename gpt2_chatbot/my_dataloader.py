@@ -10,7 +10,7 @@ class my_dataset(torch.utils.data.Dataset):
         
         with open(path, 'r') as fp:
             self.text = fp.read()
-        self.tokens = enc.encode(raw_text)
+        self.tokens = enc.encode(self.text)
     def __len__(self):
         return len(self.tokens)
     def __getitem__(self,i):
