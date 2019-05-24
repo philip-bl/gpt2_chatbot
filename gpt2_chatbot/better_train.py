@@ -94,7 +94,7 @@ def setup_trainer(model, optimizer, device) -> Engine:
             assert isinstance(batch, torch.Tensor)
         batch = batch.to(device)
         masked_batch = mask_for_forward(batch) # replace -1 with some other token
-        lm_logits, _ = model(masked_batch)
+        lm_logits = model(masked_batch)[0]
         loss = calculate_lm_loss(lm_logits, batch)
         loss.backward()
         optimizer.step()
