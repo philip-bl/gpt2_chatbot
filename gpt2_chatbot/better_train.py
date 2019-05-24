@@ -1,3 +1,6 @@
+from functools import partial
+from itertools import repeat
+
 from typing import *
 
 import torch
@@ -7,10 +10,13 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from ignite.engine import Engine, Events
 from ignite.handlers import TerminateOnNan
+from ignite.contrib.handlers import TensorboardLogger, CustomPeriodicEvent
 
 from libcrap.torch.training import setup_tensorboard_logger
 
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
+
+from gpt2_chatbot.model_sampler import sample_sequence
 
 
 def calculate_lm_loss(lm_logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -97,10 +103,59 @@ def mask_for_forward(batch: torch.Tensor) -> torch.Tensor:
     return torch.masked_fill(batch, batch == -1, 6666)
 
 
+def log_unconditional_samples(
+    tb_logger: TensorboardLogger, tokenizer, trainer, model, device,
+    num_samples: int, sequence_length: int, temperature: float, top_k: int, 
+) -> None:
+    """num_samples sequences of this length must fit into device's RAM together
+    with the model."""
+    array = sample_sequence(
+        model=model, length=sequence_length,
+        start_token = tokenizer.encoder["<|endoftext|>"],
+        batch_size=num_samples, temperature=temperature, top_k=top_k,
+        device=device
+    ).cpu().numpy()
+    assert array.shape == (num_samples, sequence_length + 1)
+    arrays_as_strings = (str(arr) for arr in array)
+    texts = (tokenizer.decode(arr) for arr in array)
+    sample_headers = (f"\n# Sample {i}\n" for i in range(num_samples))
+    text_header = "## Text\n"
+    array_header = "\n## Array of tokens\n"
+    string_to_log = "".join(
+        "".join(tuple_)
+        for tuple_ in zip(
+            sample_headers, repeat(text_header), texts,
+            repeat(array_header), arrays_as_strings
+        )
+    )
+    tb_logger.writer.add_text(
+        "unconditional", string_to_log, trainer.state.iteration
+    )
+
+
+def setup_unconditional_sampling(
+    tb_logger: TensorboardLogger, tokenizer, model, device,
+    num_samples, sequence_length, temperature, top_k,
+    trainer, every_num_iterations: int
+) -> None:
+    custom_event = CustomPeriodicEvent(n_iterations=every_num_iterations)
+    custom_event.attach(trainer)
+    @trainer.on(getattr(custom_event.Events, f"ITERATIONS_{every_num_iterations}_COMPLETED"))
+    def log_unconditional_samples_handler(trainer_: Engine) -> None:
+        log_unconditional_samples(
+            tb_logger=tb_logger,
+            tokenizer=tokenizer, model=model, device=device,
+            num_samples=num_samples, sequence_length=sequence_length, temperature=temperature,
+            top_k=top_k, trainer=trainer
+        )
+
+
+
 if __name__ == "__main__":
     main_device = "cpu"
     num_epochs = 20
     logs_base_dir = "."
+    sample_every_num_iterations = 9
 
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     texts = [
@@ -115,6 +170,12 @@ if __name__ == "__main__":
     
     trainer = setup_trainer(model, optimizer, main_device)
     with setup_tensorboard_logger(
-        logs_base_dir, trainer, logs_subdir="gpt2", metric_names=()
-    ):
+        logs_base_dir, trainer, model=model, metric_names=()
+    ) as tb_logger:
+        setup_unconditional_sampling(
+            tb_logger=tb_logger, tokenizer=tokenizer, model=model,
+            device=main_device,
+            num_samples=2, sequence_length=256, temperature=1.0, top_k=40,
+            trainer=trainer, every_num_iterations=sample_every_num_iterations
+        )
         trainer.run(data_loader, num_epochs)
