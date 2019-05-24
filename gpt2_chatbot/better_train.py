@@ -128,7 +128,7 @@ def mask_for_forward(batch: torch.Tensor) -> torch.Tensor:
 
 def log_unconditional_samples(
     tb_logger: TensorboardLogger, tokenizer, trainer, model, device,
-    num_samples: int, sequence_length: int, temperature: float, top_k: int, 
+    num_samples: int, sequence_length: int, temperature: float, top_k: int,
 ) -> None:
     """num_samples sequences of this length must fit into device's RAM together
     with the model."""
@@ -252,14 +252,14 @@ def main(
     # dataset = TensorDataset(batch)
     # data_loader = DataLoader(dataset, batch_size=2)
     model = GPT2LMHeadModel.from_pretrained("gpt2")
+    if data_parallel:
+        model = nn.DataParallel(model)
     if model_path:
         state_dict = torch.load(model_path)
         model.load_state_dict(torch.load(model_path, map_location=main_device))
     model.to(main_device)
-    if data_parallel:
-        model = nn.DataParallel(model)
     optimizer = get_optimizer(model, data_loader, num_epochs, learning_rate)
-    
+
     trainer = setup_trainer(model, optimizer, main_device, data_parallel)
     checkpointer = ModelCheckpoint(
         checkpoints_dir, save_interval=checkpoint_every_num_iterations,
