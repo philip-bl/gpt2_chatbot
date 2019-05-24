@@ -1,6 +1,8 @@
+from collections import namedtuple
 from functools import partial
 from itertools import repeat
 import logging
+from tempfile import mkdtemp
 
 from typing import *
 
@@ -22,6 +24,7 @@ from libcrap.torch.training import setup_tensorboard_logger
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
 
 from model_sampler import sample_sequence
+from data_loader import get_data_loader
 
 
 logger = logging.getLogger()
@@ -159,6 +162,17 @@ def setup_unconditional_sampling(
         )
 
 
+Args = namedtuple(
+    "Args",
+    ("context_length", "min_file_len", "max_file_len", "output_dir")
+)
+def make_args(sequence_length: int, output_dir: str) -> Args:
+    return Args(
+        sequence_length, min_file_len=1, max_file_len=10**20,
+        output_dir=output_dir
+    )
+
+
 @click.command()
 @click_log.simple_verbosity_option(logger)
 @click.option("--cuda/--no-cuda", default=True)
@@ -182,22 +196,35 @@ def setup_unconditional_sampling(
     help="""See https://www.gwern.net/GPT-2 ctrl+f temperature."""
 )
 @click.option("--sampling-top-k", type=int, default=30)
+@click.option("--dataset-path", type=click.Path(), required=True)
+@click.option("--dataset-cache-dir", type=click.Path(), required=False)
+@click.option("--train-batch-size", type=int, default=24)
+@click.option("--train-sequence-length", type=int, default=512)
 def main(
     cuda: bool, data_parallel: bool, logs_dir: str, checkpoints_dir: str,
     num_epochs: int, sample_every_num_iterations: int,
     checkpoint_every_num_iterations: int, learning_rate: float,
     sampling_sequence_length: int, sampling_num_samples: int,
-    sampling_temperature: float, sampling_top_k: int
+    sampling_temperature: float, sampling_top_k: int,
+    dataset_path: str, dataset_cache_dir: Optional[str]
+    train_batch_size: int, train_sequence_length: int
 ) -> None:
     main_device = torch.device("cuda") if cuda else torch.device("cpu")
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    texts = [
-        "Hello world! Oh, what a sunny",
-        "I hate this dog. I hate all the dogs. Oh how I would love to kill all the"
-    ]
-    batch = encode_many_texts(tokenizer, texts)
-    dataset = TensorDataset(batch)
-    data_loader = DataLoader(dataset, batch_size=2)
+    if dataset_cache_dir is None:
+        dataset_cache_dir = mkdtemp()
+    data_loader = get_data_loader(
+        dataset_path, tokenizer, train_batch_size,
+        make_args(train_sequence_length, dataset_cache_dir),
+        verbose=False
+    )
+    # texts = [
+    #      "Hello world! Oh, what a sunny",
+    #     "I hate this dog. I hate all the dogs. Oh how I would love to kill all the"
+    # ]
+    # batch = encode_many_texts(tokenizer, texts)
+    # dataset = TensorDataset(batch)
+    # data_loader = DataLoader(dataset, batch_size=2)
     model = GPT2LMHeadModel.from_pretrained("gpt2").to(main_device)
     model = nn.DataParallel(model)
     optimizer = get_optimizer(model, data_loader, num_epochs, learning_rate)
