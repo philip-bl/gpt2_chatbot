@@ -5,7 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as tnnf
 from torch.utils.data import TensorDataset, DataLoader
 
-from ignite.engine import Engine
+from ignite.engine import Engine, Events
+from ignite.handlers import TerminateOnNan
+
+from libcrap.torch.training import setup_tensorboard_logger
 
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
 
@@ -62,7 +65,7 @@ def get_optimizer(
     return optimizer
 
 
-def create_trainer(model, optimizer, device) -> Engine:
+def setup_trainer(model, optimizer, device) -> Engine:
     def update(trainer, batch: Tuple[torch.Tensor]):
         model.train()
         optimizer.zero_grad()
@@ -74,7 +77,9 @@ def create_trainer(model, optimizer, device) -> Engine:
         optimizer.step()
         print(loss.item())
         return loss.item()
-    return Engine(update)
+    trainer = Engine(update)
+    trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
+    return trainer
 
 
 def encode_many_texts(tokenizer: GPT2Tokenizer, texts: Iterable[str]) \
@@ -95,6 +100,8 @@ def mask_for_forward(batch: torch.Tensor) -> torch.Tensor:
 if __name__ == "__main__":
     main_device = "cpu"
     num_epochs = 20
+    logs_base_dir = "."
+
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     texts = [
         "Hello world! Oh, what a sunny",
@@ -105,5 +112,9 @@ if __name__ == "__main__":
     data_loader = DataLoader(dataset, batch_size=2)
     model = GPT2LMHeadModel.from_pretrained("gpt2")
     optimizer = get_optimizer(model, data_loader, num_epochs, 5e-5)
-    trainer = create_trainer(model, optimizer, main_device)
-    trainer.run(data_loader, num_epochs)
+    
+    trainer = setup_trainer(model, optimizer, main_device)
+    with setup_tensorboard_logger(
+        logs_base_dir, trainer, logs_subdir="gpt2", metric_names=()
+    ):
+        trainer.run(data_loader, num_epochs)
