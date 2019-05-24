@@ -6,7 +6,7 @@ class my_dataset(torch.utils.data.Dataset):
     def __init__(self, path_data, path_model, seq_lenth = 512 ):
         self.enc = GPT2Tokenizer.from_pretrained(path_model)
         
-        with open(path, 'r') as fp:
+        with open(path_model, 'r') as fp:
             self.text = fp.read()
         self.tokens = enc.encode(self.text)
     def __len__(self):
