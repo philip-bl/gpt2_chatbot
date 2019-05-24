@@ -135,8 +135,8 @@ def log_unconditional_samples(
     arrays_as_strings = (str(arr) for arr in array)
     texts = (tokenizer.decode(arr) for arr in array)
     sample_headers = (f"\n# Sample {i}\n" for i in range(num_samples))
-    text_header = "## Text\n"
-    array_header = "\n## Array of tokens\n"
+    text_header = "## Text\n```"
+    array_header = "\n```\n## Array of tokens\n"
     string_to_log = "".join(
         "".join(tuple_)
         for tuple_ in zip(
