@@ -87,7 +87,12 @@ def setup_trainer(model, optimizer, device) -> Engine:
     def update(trainer, batch: Tuple[torch.Tensor]):
         model.train()
         optimizer.zero_grad()
-        batch = batch[0].to(device)
+        if isinstance(batch, tuple) or isinstance(batch, list):
+            assert len(batch) == 1
+            batch = batch[0]
+        else:
+            assert isinstance(batch, torch.Tensor)
+        batch = batch.to(device)
         masked_batch = mask_for_forward(batch) # replace -1 with some other token
         lm_logits, _ = model(masked_batch)
         loss = calculate_lm_loss(lm_logits, batch)
@@ -226,7 +231,8 @@ def main(
     # dataset = TensorDataset(batch)
     # data_loader = DataLoader(dataset, batch_size=2)
     model = GPT2LMHeadModel.from_pretrained("gpt2").to(main_device)
-    model = nn.DataParallel(model)
+    if data_parallel:
+        model = nn.DataParallel(model)
     optimizer = get_optimizer(model, data_loader, num_epochs, learning_rate)
     
     trainer = setup_trainer(model, optimizer, main_device)
