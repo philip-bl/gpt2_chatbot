@@ -206,7 +206,7 @@ def main(
     checkpoint_every_num_iterations: int, learning_rate: float,
     sampling_sequence_length: int, sampling_num_samples: int,
     sampling_temperature: float, sampling_top_k: int,
-    dataset_path: str, dataset_cache_dir: Optional[str]
+    dataset_path: str, dataset_cache_dir: Optional[str],
     train_batch_size: int, train_sequence_length: int
 ) -> None:
     main_device = torch.device("cuda") if cuda else torch.device("cpu")
