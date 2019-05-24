@@ -98,7 +98,6 @@ def setup_trainer(model, optimizer, device) -> Engine:
         loss = calculate_lm_loss(lm_logits, batch)
         loss.backward()
         optimizer.step()
-        print(loss.item())
         return loss.item()
     trainer = Engine(update)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
