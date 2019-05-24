@@ -1,5 +1,6 @@
 from functools import partial
 from itertools import repeat
+import logging
 
 from typing import *
 
@@ -12,6 +13,9 @@ from ignite.engine import Engine, Events
 from ignite.handlers import TerminateOnNan, ModelCheckpoint
 from ignite.contrib.handlers import TensorboardLogger, CustomPeriodicEvent
 
+import click
+import click_log
+
 from libcrap import get_now_as_str
 from libcrap.torch.training import setup_tensorboard_logger
 
@@ -19,6 +23,10 @@ from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
 
 from model_sampler import sample_sequence
 
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+click_log.basic_config(logger)
 
 def calculate_lm_loss(lm_logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """Target may contain -1 in some entries, they will not contribute to loss.
@@ -151,13 +159,27 @@ def setup_unconditional_sampling(
         )
 
 
-if __name__ == "__main__":
-    main_device = torch.device("cpu")
-    num_epochs = 20
-    logs_base_dir = "."
-    sample_every_num_iterations = 9
-    checkpoint_every_num_iterations = sample_every_num_iterations
-
+@click.command()
+@click_log.simple_verbosity_option(logger)
+@click.option("--cuda/--no-cuda", default=True)
+@click.option("--data-parallel/--no-data-parallel", default=True)
+@click.option("--logs-dir", "-l",
+    type=click.Path(file_okay=False, dir_okay=True, writable=True),
+    default="."
+)
+@click.option("--checkpoints-dir", "-c",
+    type=click.Path(file_okay=False, dir_okay=True, writable=True),
+    default="."
+)
+@click.option("--num-epochs", "-n", type=int, default=100)
+@click.option("--sample-every-num-iterations", "-s", type=int, default=200)
+@click.option("--checkpoint-every-num-iterations", "-C", type=int, default=1500)
+def main(
+    cuda: bool, data_parallel: bool, logs_dir: str, checkpoints_dir: str,
+    num_epochs: int, sample_every_num_iterations: int,
+    checkpoint_every_num_iterations: int
+) -> None:
+    main_device = torch.device("cuda") if cuda else torch.device("cpu")
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     texts = [
         "Hello world! Oh, what a sunny",
@@ -172,7 +194,7 @@ if __name__ == "__main__":
     
     trainer = setup_trainer(model, optimizer, main_device)
     checkpointer = ModelCheckpoint(
-        logs_base_dir, save_interval=checkpoint_every_num_iterations,
+        logs_dir, save_interval=checkpoint_every_num_iterations,
         require_empty=False,
         filename_prefix=f"gpt2_{get_now_as_str(year=True)}",
         n_saved=10**10
@@ -182,7 +204,7 @@ if __name__ == "__main__":
         {"model": model}
     )
     with setup_tensorboard_logger(
-        logs_base_dir, trainer, model=model, metric_names=()
+        logs_dir, trainer, model=model, metric_names=()
     ) as tb_logger:
         setup_unconditional_sampling(
             tb_logger=tb_logger, tokenizer=tokenizer, model=model,
@@ -191,3 +213,7 @@ if __name__ == "__main__":
             trainer=trainer, every_num_iterations=sample_every_num_iterations
         )
         trainer.run(data_loader, num_epochs)
+
+
+if __name__ == "__main__":
+    main()
