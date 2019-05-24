@@ -262,7 +262,7 @@ def main(
     
     trainer = setup_trainer(model, optimizer, main_device, data_parallel)
     checkpointer = ModelCheckpoint(
-        logs_dir, save_interval=checkpoint_every_num_iterations,
+        checkpoints_dir, save_interval=checkpoint_every_num_iterations,
         require_empty=False,
         filename_prefix=f"gpt2_{get_now_as_str(year=True)}",
         n_saved=10**10
