@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from pytorch_pretrained_bert import GPT2Tokenizer
+import argparse
 
 class my_dataset(torch.utils.data.Dataset):
     def __init__(self, path_data, path_model, seq_lenth = 512 ):
@@ -15,7 +16,7 @@ class my_dataset(torch.utils.data.Dataset):
         try:
             return self.tokens[i:i+seq_length]
         except:
-            return self.tokens[i:len(self.tokens)]
+            return self.tokens[i:len(self.tokens)] + self.tokens[0:len(self.tokens)-i]
         
   
       
