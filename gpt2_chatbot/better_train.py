@@ -225,6 +225,8 @@ def main(
     train_batch_size: int, train_sequence_length: int
 ) -> None:
     main_device = torch.device("cuda") if cuda else torch.device("cpu")
+    if data_parallel:
+        assert train_batch_size % torch.cuda.device_count() == 0
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     if dataset_cache_dir is None:
         dataset_cache_dir = mkdtemp()
