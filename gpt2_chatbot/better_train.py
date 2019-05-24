@@ -189,7 +189,6 @@ def debug_memory_leak():
 
 
 @click.command()
-@click_log.simple_verbosity_option(logger)
 @click.option("--cuda/--no-cuda", default=True)
 @click.option("--data-parallel/--no-data-parallel", default=True)
 @click.option("--logs-dir",
@@ -204,8 +203,8 @@ def debug_memory_leak():
 @click.option("--checkpoint-every-num-iterations", type=int, default=1500)
 @click.option("--learning-rate", type=float, default=5e-5)
 @click.option("--sample-every-num-iterations", type=int, default=200)
-@click.option("--sampling-sequence-length", type=int, default=256)
-@click.option("--sampling-num-samples", type=int, default=4)
+@click.option("--sampling-sequence-length", type=int, default=400)
+@click.option("--sampling-num-samples", type=int, default=8)
 @click.option(
     "--sampling-temperature", type=float, default=1.0,
     help="""See https://www.gwern.net/GPT-2 ctrl+f temperature."""
@@ -215,6 +214,7 @@ def debug_memory_leak():
 @click.option("--dataset-cache-dir", type=click.Path(), required=False)
 @click.option("--train-batch-size", type=int, default=24)
 @click.option("--train-sequence-length", type=int, default=512)
+@click_log.simple_verbosity_option(logger)
 def main(
     cuda: bool, data_parallel: bool, logs_dir: str, checkpoints_dir: str,
     num_epochs: int, sample_every_num_iterations: int,
@@ -230,18 +230,18 @@ def main(
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     if dataset_cache_dir is None:
         dataset_cache_dir = mkdtemp()
-    data_loader = get_data_loader(
-        dataset_path, tokenizer, train_batch_size,
-        make_args(train_sequence_length, dataset_cache_dir),
-        verbose=False
-    )
-    # texts = [
-    #      "Hello world! Oh, what a sunny",
-    #     "I hate this dog. I hate all the dogs. Oh how I would love to kill all the"
-    # ]
-    # batch = encode_many_texts(tokenizer, texts)
-    # dataset = TensorDataset(batch)
-    # data_loader = DataLoader(dataset, batch_size=2)
+    # data_loader = get_data_loader(
+    #     dataset_path, tokenizer, train_batch_size,
+    #     make_args(train_sequence_length, dataset_cache_dir),
+    #     verbose=False
+    # )
+    texts = [
+         "Hello world! Oh, what a sunny",
+        "I hate this dog. I hate all the dogs. Oh how I would love to kill all the"
+    ]
+    batch = encode_many_texts(tokenizer, texts)
+    dataset = TensorDataset(batch)
+    data_loader = DataLoader(dataset, batch_size=2)
     model = GPT2LMHeadModel.from_pretrained("gpt2").to(main_device)
     if data_parallel:
         model = nn.DataParallel(model)
