@@ -16,7 +16,7 @@ from libcrap.torch.training import setup_tensorboard_logger
 
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
 
-from gpt2_chatbot.model_sampler import sample_sequence
+from model_sampler import sample_sequence
 
 
 def calculate_lm_loss(lm_logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -75,7 +75,7 @@ def setup_trainer(model, optimizer, device) -> Engine:
     def update(trainer, batch: Tuple[torch.Tensor]):
         model.train()
         optimizer.zero_grad()
-        batch = batch[0]
+        batch = batch[0].to(device)
         masked_batch = mask_for_forward(batch) # replace -1 with some other token
         lm_logits, _ = model(masked_batch)
         loss = calculate_lm_loss(lm_logits, batch)
@@ -152,7 +152,7 @@ def setup_unconditional_sampling(
 
 
 if __name__ == "__main__":
-    main_device = "cpu"
+    main_device = torch.device("cuda")
     num_epochs = 20
     logs_base_dir = "."
     sample_every_num_iterations = 9
@@ -165,7 +165,8 @@ if __name__ == "__main__":
     batch = encode_many_texts(tokenizer, texts)
     dataset = TensorDataset(batch)
     data_loader = DataLoader(dataset, batch_size=2)
-    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    model = GPT2LMHeadModel.from_pretrained("gpt2").to(main_device)
+    model = nn.DataParallel(model)
     optimizer = get_optimizer(model, data_loader, num_epochs, 5e-5)
     
     trainer = setup_trainer(model, optimizer, main_device)
