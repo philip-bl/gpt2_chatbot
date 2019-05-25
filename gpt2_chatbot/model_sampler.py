@@ -18,7 +18,7 @@ def top_k_logits(logits, k):
         return torch.where(logits < batch_mins, torch.ones_like(logits) * -1e10, logits)
 
 
-def sample_sequence(model, length, start_token=None, batch_size=None, context=None, temperature=1, top_k=0, device='cuda', sample=True):
+def sample_sequence(model, length, cond_tokens, start_token=None, batch_size=None, context=None, temperature=1, top_k=0, device='cuda', sample=True):
     if start_token is None:
         assert context is not None, 'Specify exactly one of start_token and context!'
         context = torch.tensor(context, device=device, dtype=torch.long).unsqueeze(0).repeat(batch_size, 1)
@@ -26,10 +26,10 @@ def sample_sequence(model, length, start_token=None, batch_size=None, context=No
         assert context is None, 'Specify exactly one of start_token and context!'
         context = torch.full((batch_size, 1), start_token, device=device, dtype=torch.long)
     prev = context
-    output = context
+    output = context    
     past = None
     with torch.no_grad():
-        for i in trange(length):
+        for i in range(length):
             logits, past = model(prev, past=past)
             logits = logits[:, -1, :] / temperature
             logits = top_k_logits(logits, k=top_k)
@@ -38,6 +38,8 @@ def sample_sequence(model, length, start_token=None, batch_size=None, context=No
                 prev = torch.multinomial(log_probs, num_samples=1)
             else:
                 _, prev = torch.topk(log_probs, k=1, dim=-1)
+            if(prev in cond_tokens):
+                break
             output = torch.cat((output, prev), dim=1)
     return output
 

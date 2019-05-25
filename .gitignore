@@ -102,3 +102,12 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# pytorch model 
+*.pth
+
+# ipython notebook
+*.ipynb
+
+#vs code stuffs
+.vscode
