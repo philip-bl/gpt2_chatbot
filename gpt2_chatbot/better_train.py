@@ -207,9 +207,9 @@ def debug_memory_leak():
     default="."
 )
 @click.option("--num-epochs", type=int, default=100)
-@click.option("--checkpoint-every-num-iterations", type=int, default=1500)
+@click.option("--checkpoint-every-num-iterations", type=int, default=100)
 @click.option("--learning-rate", type=float, default=5e-5)
-@click.option("--sample-every-num-iterations", type=int, default=200)
+@click.option("--sample-every-num-iterations", type=int, default=100)
 @click.option("--sampling-sequence-length", type=int, default=400)
 @click.option("--sampling-num-samples", type=int, default=8)
 @click.option(
