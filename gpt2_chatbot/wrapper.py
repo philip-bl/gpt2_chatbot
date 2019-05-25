@@ -62,25 +62,24 @@ def init_model(seed=0, model_name_or_path='gpt2'):
     model_name_or_path : string, optional
         either model name for existing model or path for trained model (not realised yet)
     '''
-def init_model(seed=0, model_name_or_path='gpt2'):
     np.random.seed(seed)
     torch.random.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    enc = GPT2Tokenizer.from_pretrained(model_name_or_path)
-    model = GPT2LMHeadModel.from_pretrained(model_name_or_path)
+    enc = GPT2Tokenizer.from_pretrained('gpt2')
+    model = GPT2LMHeadModel.from_pretrained('gpt2')
     
     model = nn.DataParallel(model)
-    model.load_state_dict(torch.load("../gpt2_model_3200.pth"))
+    model.load_state_dict(torch.load(model_name_or_path))
     model = model.module
     
     model.to(device)
     model.eval()
     return model, enc, device
 
-def model_forward(input_text, *model_params, length=-1, top_k=0, temperature=1.0):
+def model_forward(input_text, conditioning, *model_params, length=-1, top_k=0, temperature=1.0):
     '''
     Parameters:
     ----------
@@ -158,7 +157,7 @@ def produce_answer(user_input, prev_msgs, *model_params, **wrap_params):
     return answer
 
 def main():
-    model, enc, device = init_model(seed=42)
+    model, enc, device = init_model(42, "../gpt2_model_52800.pth")
     messages = []
     while(True):
         print("\n")
