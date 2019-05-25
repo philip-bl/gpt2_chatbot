@@ -104,8 +104,7 @@ venv.bak/
 .mypy_cache/
 
 # pytorch model 
-.pth
+*.pth
 
 # ipython notebook
-.ipynb
-gpt2_model_16000.pth
+*.ipynb
