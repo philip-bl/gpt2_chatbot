@@ -170,15 +170,14 @@ def log_conditional_samples(
     outputs_arrays = []
     for context_tensor in contexts_tensors:
         assert context_tensor.ndimension() == 1
-        sequence_length = len(context_tensor) + answers_length
         output_array = sample_sequence(
-            model=model, length=sequence_length,
+            model=model, length=answers_length,
             batch_size=1, context=context_tensor, temperature=temperature,
             top_k=top_k, device=device
         ).cpu().numpy()[0]
-        assert output_array.shape == (sequence_length, )
+        assert output_array.shape == (answers_length + len(context_tensor), )
         outputs_arrays.append(output_array)
-    outputs_strings = (tokenizer.decode(list(arr) for arr in outputs_arrays))
+    outputs_strings = (tokenizer.decode(list(arr)) for arr in outputs_arrays)
     contexts_arrays_as_strings = (str(tensor.numpy()) for tensor in contexts_tensors)
     outputs_arrays_as_strings = (str(array) for array in outputs_arrays)
 
@@ -337,17 +336,16 @@ def main(
     with setup_tensorboard_logger(
         logs_dir, trainer, model=model, metric_names=()
     ) as tb_logger:
+        conditional_contexts = [[50256, 198, 44484, 25, 750, 673, 1282, 198, 18861, 25]]
         setup_sampling(
             tb_logger=tb_logger, tokenizer=tokenizer, model=model,
             device=main_device,
-            num_samples=sampling_num_samples, sequence_length=sampling_sequence_length,
+            num_samples=sampling_num_samples,
+            sequence_length=sampling_sequence_length,
             temperature=sampling_temperature, top_k=sampling_top_k,
             trainer=trainer, every_num_iterations=sample_every_num_iterations,
             answers_length=conditional_sampling_answer_length,
-            contexts=torch.tensor(
-                [[50256, 198, 44484, 25, 750, 673, 1282, 198, 18861, 25, 21349]],
-                dtype=torch.int64
-            )
+            contexts=torch.tensor(conditional_contexts, dtype=torch.int64)
         )
         trainer.run(data_loader, num_epochs)
 
