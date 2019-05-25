@@ -53,7 +53,7 @@ def load_dataset(enc, path, args, combine=50000):
                 raw_text += text
             if len(raw_text) >= combine:
                 subtexts = raw_text.split("<|endoftext|>")
-                subtexts_as_tokens = [np.stack(enc.encode(s)) for s in subtexts]
+                subtexts_as_tokens = [np.stack(enc.encode(s)) for s in subtexts if s]
                 foo = ["<|endoftext|>"] + list(intersperse(
                     np.array([enc.encoder["<|endoftext|>"]]), subtexts_as_tokens
                 ))
@@ -63,7 +63,7 @@ def load_dataset(enc, path, args, combine=50000):
                 raw_text += '<|endoftext|>'
     if raw_text:
         subtexts = raw_text.split("<|endoftext|>")
-        subtexts_as_tokens = [np.stack(enc.encode(s)) for s in subtexts]
+        subtexts_as_tokens = [np.stack(enc.encode(s)) for s in subtexts if s]
         foo = list(intersperse(
             np.array([enc.encoder["<|endoftext|>"]]), subtexts_as_tokens
         ))

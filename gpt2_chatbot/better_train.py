@@ -3,6 +3,7 @@ from functools import partial
 from itertools import repeat
 import logging
 from tempfile import mkdtemp
+import faulthandler
 
 from typing import *
 
@@ -133,7 +134,7 @@ def log_unconditional_samples(
     """num_samples sequences of this length must fit into device's RAM together
     with the model."""
     array = sample_sequence(
-        model=model, length=sequence_length,
+        model=model, length=sequence_length, cond_tokens=(),
         start_token = tokenizer.encoder["<|endoftext|>"],
         batch_size=num_samples, temperature=temperature, top_k=top_k,
         device=device
@@ -171,7 +172,7 @@ def log_conditional_samples(
     for context_tensor in contexts_tensors:
         assert context_tensor.ndimension() == 1
         output_array = sample_sequence(
-            model=model, length=answers_length,
+            model=model, length=answers_length, cond_tokens=(),
             batch_size=1, context=context_tensor, temperature=temperature,
             top_k=top_k, device=device
         ).cpu().numpy()[0]
@@ -296,24 +297,20 @@ def main(
     train_batch_size: int, train_sequence_length: int,
     conditional_sampling_answer_length: int, model_path: Optional[str]
 ) -> None:
+    faulthandler.enable()
     main_device = torch.device("cuda") if cuda else torch.device("cpu")
     if data_parallel:
         assert train_batch_size % torch.cuda.device_count() == 0
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     if dataset_cache_dir is None:
         dataset_cache_dir = mkdtemp()
+    # don't show a shitton of warning produced by the encoder
+    logging.getLogger("pytorch_pretrained_bert.tokenization_gpt2").setLevel(logging.ERROR)
     data_loader = get_data_loader(
         dataset_path, tokenizer, train_batch_size,
         make_args(train_sequence_length, dataset_cache_dir),
         verbose=False
     )
-    # texts = [
-    #      "Hello world! Oh, what a sunny",
-    #     "I hate this dog. I hate all the dogs. Oh how I would love to kill all the"
-    # ]
-    # batch = encode_many_texts(tokenizer, texts)
-    # dataset = TensorDataset(batch)
-    # data_loader = DataLoader(dataset, batch_size=2)
     model = GPT2LMHeadModel.from_pretrained("gpt2")
     if data_parallel:
         model = nn.DataParallel(model)
@@ -336,7 +333,22 @@ def main(
     with setup_tensorboard_logger(
         logs_dir, trainer, model=model, metric_names=()
     ) as tb_logger:
-        conditional_contexts = [[50256, 198, 44484, 25, 750, 673, 1282, 198, 18861, 25]]
+        conditional_contexts = [
+            [50256, 198, 44484, 25, 750, 673, 1282, 198, 18861, 25],
+            [50256, 1212, 318, 257, 5273, 1022, 362, 661, 13, 198, 44484, 25, 5811, 11, 810, 318, 9070, 30, 198, 18861, 25],
+            [50256, 1212, 318, 262, 5273, 1022, 362, 661, 13, 198, 44484, 25, 5811, 11, 810, 318, 9070, 30, 198, 18861, 25],
+            [50256, 1212, 318, 257, 5273, 1022, 362, 661, 13, 198, 44484, 25, 5811, 11, 810, 318, 9070, 30, 198, 18861, 25, 220],
+            [44484, 25, 5811, 11, 810, 318, 9070, 30, 198, 18861, 25],
+            [50256, 1212, 318, 257, 5273, 1022, 362, 661, 13, 198, 44484, 25, 14026, 502, 3387, 11, 644, 318, 262, 3616, 286, 1204, 30, 198, 18861, 25],
+            [50256, 1212, 318, 257, 5273, 1022, 362, 661, 13, 198, 44484, 25, 2141, 345, 645, 262, 2479, 286, 3668, 30, 198, 18861, 25],
+            [50256, 1212, 318, 262, 5273, 1022, 362, 661, 13, 198, 44484, 25, 2141, 345, 645, 262, 2479, 286, 3668, 30, 198, 18861, 25],
+            [50256, 1212, 318, 257, 5273, 1022, 362, 661, 13, 198, 44484, 25, 18435, 0, 2011, 1438, 318, 9844, 11, 644, 318, 534, 1438, 30, 198, 18861, 25],
+            [50256, 1212, 318, 262, 5273, 1022, 362, 661, 13, 198, 44484, 25, 18435, 0, 2011, 1438, 318, 9844, 11, 644, 318, 534, 1438, 30, 198, 18861, 25],
+            [50256, 1212, 318, 257, 5273, 1022, 362, 661, 13, 198, 44484, 25, 4599, 3329, 11, 4995, 13, 1867, 389, 345, 3612, 546, 30, 198, 18861, 25],
+            [50256, 1212, 318, 257, 5273, 1022, 362, 661, 13, 198, 44484, 25, 4599, 3329, 11, 4995, 13, 1867, 389, 345, 3612, 546, 30, 198, 18861, 25, 220],
+            [50256, 1212, 318, 262, 5273, 1022, 362, 661, 13, 198, 44484, 25, 15902, 612, 11, 16195, 198, 18861, 25, 18435, 11, 4950, 13, 18460, 1110, 11, 2125, 470, 340, 30, 198, 44484, 25, 1892, 1107, 13, 314, 588, 37259, 1528, 13, 314, 588, 14357, 13, 198, 18861, 25],
+            [44484, 25, 15902, 612, 11, 16195, 198, 18861, 25, 18435, 11, 4950, 13, 18460, 1110, 11, 2125, 470, 340, 30, 198, 44484, 25, 1892, 1107, 13, 314, 588, 37259, 1528, 13, 314, 588, 14357, 13, 198, 18861, 25]
+        ]
         setup_sampling(
             tb_logger=tb_logger, tokenizer=tokenizer, model=model,
             device=main_device,
@@ -345,7 +357,7 @@ def main(
             temperature=sampling_temperature, top_k=sampling_top_k,
             trainer=trainer, every_num_iterations=sample_every_num_iterations,
             answers_length=conditional_sampling_answer_length,
-            contexts=torch.tensor(conditional_contexts, dtype=torch.int64)
+            contexts=[torch.tensor(context, dtype=torch.int64) for context in conditional_contexts]
         )
         trainer.run(data_loader, num_epochs)
 
