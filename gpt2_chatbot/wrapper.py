@@ -2,6 +2,7 @@ from model_sampler import *
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import trange
 
