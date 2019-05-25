@@ -9,7 +9,10 @@ from typing import *
 
 import numpy as np
 import tqdm
+
 from torch.utils.data import DataLoader, Dataset, Subset
+
+from more_itertools import intersperse
 
 from pytorch_pretrained_bert import GPT2Tokenizer
 
@@ -49,14 +52,22 @@ def load_dataset(enc, path, args, combine=50000):
                     continue
                 raw_text += text
             if len(raw_text) >= combine:
-                tokens = np.stack(enc.encode(raw_text))
-                token_chunks.append(tokens)
+                subtexts = raw_text.split("<|endoftext|>")
+                subtexts_as_tokens = [np.stack(enc.encode(s)) for s in subtexts if s]
+                foo = ["<|endoftext|>"] + list(intersperse(
+                    np.array([enc.encoder["<|endoftext|>"]]), subtexts_as_tokens
+                ))
+                token_chunks.append(np.concatenate(foo))
                 raw_text = ''
             else:
                 raw_text += '<|endoftext|>'
     if raw_text:
-        tokens = np.stack(enc.encode(raw_text))
-        token_chunks.append(tokens)
+        subtexts = raw_text.split("<|endoftext|>")
+        subtexts_as_tokens = [np.stack(enc.encode(s)) for s in subtexts if s]
+        foo = list(intersperse(
+            np.array([enc.encoder["<|endoftext|>"]]), subtexts_as_tokens
+        ))
+        token_chunks.append(np.concatenate(foo))
     return token_chunks
 
 

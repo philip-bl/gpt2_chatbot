@@ -1,6 +1,7 @@
 """Collection of functions based on huggingface examples/run_gpt2.py to sample from a GPT-2 model."""
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import trange
 
@@ -28,6 +29,8 @@ def sample_sequence(model, length, cond_tokens, start_token=None, batch_size=Non
     prev = context
     output = context    
     past = None
+    if isinstance(model, nn.DataParallel):
+        model = model.module
     with torch.no_grad():
         for i in range(length):
             logits, past = model(prev, past=past)
