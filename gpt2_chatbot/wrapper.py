@@ -3,6 +3,7 @@ from model_sampler import *
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 from tqdm import trange
 
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer
