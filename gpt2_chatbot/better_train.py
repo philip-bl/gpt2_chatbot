@@ -83,7 +83,7 @@ def get_optimizer(
     return optimizer
 
 
-def setup_trainer(model, optimizer, device) -> Engine:
+def setup_trainer(model, optimizer, device, data_parallel: bool) -> Engine:
     def update(trainer, batch: Tuple[torch.Tensor]):
         model.train()
         optimizer.zero_grad()
@@ -93,10 +93,17 @@ def setup_trainer(model, optimizer, device) -> Engine:
         else:
             assert isinstance(batch, torch.Tensor)
         batch = batch.to(device)
-        masked_batch = mask_for_forward(batch) # replace -1 with some other token
-        lm_logits = model(masked_batch)[0]
-        loss = calculate_lm_loss(lm_logits, batch)
-        loss.backward()
+        if not data_parallel:
+            masked_batch = mask_for_forward(batch) # replace -1 with some other token
+            lm_logits = model(masked_batch)[0]
+            loss = calculate_lm_loss(lm_logits, batch)
+            loss.backward()
+        else:
+            # handling of -1 as padding is not implemented
+            losses = model(batch, lm_labels=batch)
+            assert losses.shape == (torch.cuda.device_count(), )
+            losses.backward(torch.ones_like(losses))
+            loss = losses.mean()
         optimizer.step()
         return loss.item()
     trainer = Engine(update)
@@ -121,7 +128,7 @@ def mask_for_forward(batch: torch.Tensor) -> torch.Tensor:
 
 def log_unconditional_samples(
     tb_logger: TensorboardLogger, tokenizer, trainer, model, device,
-    num_samples: int, sequence_length: int, temperature: float, top_k: int, 
+    num_samples: int, sequence_length: int, temperature: float, top_k: int,
 ) -> None:
     """num_samples sequences of this length must fit into device's RAM together
     with the model."""
@@ -135,8 +142,8 @@ def log_unconditional_samples(
     arrays_as_strings = (str(arr) for arr in array)
     texts = (tokenizer.decode(arr) for arr in array)
     sample_headers = (f"\n# Sample {i}\n" for i in range(num_samples))
-    text_header = "## Text\n```"
-    array_header = "\n```\n## Array of tokens\n"
+    text_header = "## Text\n\n"
+    array_header = "\n## Array of tokens\n"
     string_to_log = "".join(
         "".join(tuple_)
         for tuple_ in zip(
@@ -149,21 +156,84 @@ def log_unconditional_samples(
     )
 
 
-def setup_unconditional_sampling(
+def log_conditional_samples(
+    tb_logger: TensorboardLogger, tokenizer, trainer, model, device,
+    contexts_tensors: Sequence[torch.Tensor], answers_length: int,
+    temperature: float, top_k: int
+) -> None:
+    """contexts must be such that ∀i contexts[i] is a one-dimensional tensor
+    of token ids. This function will not prepend anything to contexts, so
+    you must pass them including <|endoftext|> token and anything else you
+    might need.
+    """
+    contexts_strings = (tokenizer.decode(list(s.numpy())) for s in contexts_tensors)
+    outputs_arrays = []
+    for context_tensor in contexts_tensors:
+        assert context_tensor.ndimension() == 1
+        sequence_length = len(context_tensor) + answers_length
+        output_array = sample_sequence(
+            model=model, length=sequence_length,
+            batch_size=1, context=context_tensor, temperature=temperature,
+            top_k=top_k, device=device
+        ).cpu().numpy()[0]
+        assert output_array.shape == (sequence_length, )
+        outputs_arrays.append(output_array)
+    outputs_strings = (tokenizer.decode(list(arr) for arr in outputs_arrays))
+    contexts_arrays_as_strings = (str(tensor.numpy()) for tensor in contexts_tensors)
+    outputs_arrays_as_strings = (str(array) for array in outputs_arrays)
+
+    sample_headers = (f"\n# Sample {i}\n" for i in range(len(contexts_tensors)))
+    context_text_header = "## Context text\n\n"
+    context_array_header = "\n## Context array of tokens\n\n"
+    output_text_header = "\n## Output text\n\n"
+    output_array_header = "\n## Output array of tokens\n\n"
+    string_to_log = "".join(
+        "".join(tuple_)
+        for tuple_ in zip(
+            sample_headers,
+            repeat(context_text_header), contexts_strings,
+            repeat(context_array_header), contexts_arrays_as_strings,
+            repeat(output_text_header), outputs_strings,
+            repeat(output_array_header), outputs_arrays_as_strings
+        )
+    )
+    tb_logger.writer.add_text(
+        "conditional", string_to_log, trainer.state.iteration
+    )
+
+
+def setup_sampling(
     tb_logger: TensorboardLogger, tokenizer, model, device,
     num_samples, sequence_length, temperature, top_k,
-    trainer, every_num_iterations: int
+    trainer, every_num_iterations: int,
+    contexts: Optional[Sequence[torch.Tensor]],
+    answers_length: Optional[int]
 ) -> None:
     custom_event = CustomPeriodicEvent(n_iterations=every_num_iterations)
     custom_event.attach(trainer)
-    @trainer.on(getattr(custom_event.Events, f"ITERATIONS_{every_num_iterations}_COMPLETED"))
+    event_object = getattr(
+        custom_event.Events, f"ITERATIONS_{every_num_iterations}_COMPLETED"
+    )
+
+    @trainer.on(event_object)
     def log_unconditional_samples_handler(trainer_: Engine) -> None:
         log_unconditional_samples(
             tb_logger=tb_logger,
             tokenizer=tokenizer, model=model, device=device,
-            num_samples=num_samples, sequence_length=sequence_length, temperature=temperature,
-            top_k=top_k, trainer=trainer
+            num_samples=num_samples, sequence_length=sequence_length,
+            temperature=temperature, top_k=top_k, trainer=trainer
         )
+
+    assert (answers_length is not None) == (contexts is not None)
+    if contexts is not None:
+        @trainer.on(event_object)
+        def log_conditional_samples_handler(trainer_: Engine) -> None:
+            log_conditional_samples(
+                tb_logger=tb_logger,
+                tokenizer=tokenizer, model=model, device=device,
+                contexts_tensors=contexts, answers_length=answers_length,
+                temperature=temperature, top_k=top_k, trainer=trainer
+            )
 
 
 Args = namedtuple(
@@ -189,7 +259,6 @@ def debug_memory_leak():
 
 
 @click.command()
-@click_log.simple_verbosity_option(logger)
 @click.option("--cuda/--no-cuda", default=True)
 @click.option("--data-parallel/--no-data-parallel", default=True)
 @click.option("--logs-dir",
@@ -201,11 +270,12 @@ def debug_memory_leak():
     default="."
 )
 @click.option("--num-epochs", type=int, default=100)
-@click.option("--checkpoint-every-num-iterations", type=int, default=1500)
+@click.option("--checkpoint-every-num-iterations", type=int, default=100)
 @click.option("--learning-rate", type=float, default=5e-5)
-@click.option("--sample-every-num-iterations", type=int, default=200)
-@click.option("--sampling-sequence-length", type=int, default=256)
-@click.option("--sampling-num-samples", type=int, default=4)
+@click.option("--sample-every-num-iterations", type=int, default=100)
+@click.option("--sampling-sequence-length", type=int, default=400)
+@click.option("--conditional-sampling-answer-length", type=int, default=100)
+@click.option("--sampling-num-samples", type=int, default=8)
 @click.option(
     "--sampling-temperature", type=float, default=1.0,
     help="""See https://www.gwern.net/GPT-2 ctrl+f temperature."""
@@ -215,6 +285,8 @@ def debug_memory_leak():
 @click.option("--dataset-cache-dir", type=click.Path(), required=False)
 @click.option("--train-batch-size", type=int, default=24)
 @click.option("--train-sequence-length", type=int, default=512)
+@click.option("--model-path", type=click.Path(dir_okay=False, exists=True))
+@click_log.simple_verbosity_option(logger)
 def main(
     cuda: bool, data_parallel: bool, logs_dir: str, checkpoints_dir: str,
     num_epochs: int, sample_every_num_iterations: int,
@@ -222,7 +294,8 @@ def main(
     sampling_sequence_length: int, sampling_num_samples: int,
     sampling_temperature: float, sampling_top_k: int,
     dataset_path: str, dataset_cache_dir: Optional[str],
-    train_batch_size: int, train_sequence_length: int
+    train_batch_size: int, train_sequence_length: int,
+    conditional_sampling_answer_length: int, model_path: Optional[str]
 ) -> None:
     main_device = torch.device("cuda") if cuda else torch.device("cpu")
     if data_parallel:
@@ -242,14 +315,17 @@ def main(
     # batch = encode_many_texts(tokenizer, texts)
     # dataset = TensorDataset(batch)
     # data_loader = DataLoader(dataset, batch_size=2)
-    model = GPT2LMHeadModel.from_pretrained("gpt2").to(main_device)
+    model = GPT2LMHeadModel.from_pretrained("gpt2")
     if data_parallel:
         model = nn.DataParallel(model)
+    if model_path:
+        model.load_state_dict(torch.load(model_path, map_location=main_device))
+    model.to(main_device)
     optimizer = get_optimizer(model, data_loader, num_epochs, learning_rate)
-    
-    trainer = setup_trainer(model, optimizer, main_device)
+
+    trainer = setup_trainer(model, optimizer, main_device, data_parallel)
     checkpointer = ModelCheckpoint(
-        logs_dir, save_interval=checkpoint_every_num_iterations,
+        checkpoints_dir, save_interval=checkpoint_every_num_iterations,
         require_empty=False,
         filename_prefix=f"gpt2_{get_now_as_str(year=True)}",
         n_saved=10**10
@@ -261,12 +337,17 @@ def main(
     with setup_tensorboard_logger(
         logs_dir, trainer, model=model, metric_names=()
     ) as tb_logger:
-        setup_unconditional_sampling(
+        setup_sampling(
             tb_logger=tb_logger, tokenizer=tokenizer, model=model,
             device=main_device,
             num_samples=sampling_num_samples, sequence_length=sampling_sequence_length,
             temperature=sampling_temperature, top_k=sampling_top_k,
-            trainer=trainer, every_num_iterations=sample_every_num_iterations
+            trainer=trainer, every_num_iterations=sample_every_num_iterations,
+            answers_length=conditional_sampling_answer_length,
+            contexts=torch.tensor(
+                [[50256, 198, 44484, 25, 750, 673, 1282, 198, 18861, 25, 21349]],
+                dtype=torch.int64
+            )
         )
         trainer.run(data_loader, num_epochs)
 
