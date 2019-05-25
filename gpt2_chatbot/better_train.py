@@ -255,7 +255,6 @@ def main(
     if data_parallel:
         model = nn.DataParallel(model)
     if model_path:
-        state_dict = torch.load(model_path)
         model.load_state_dict(torch.load(model_path, map_location=main_device))
     model.to(main_device)
     optimizer = get_optimizer(model, data_loader, num_epochs, learning_rate)
