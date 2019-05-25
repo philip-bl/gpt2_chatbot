@@ -53,7 +53,7 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
     
     return output, conditioning
 
-def init_model(seed=0, model_name_or_path='gpt2'):
+def init_model(seed=0, model_path='gpt2'):
     '''
     Parameters:
     ----------
@@ -72,7 +72,7 @@ def init_model(seed=0, model_name_or_path='gpt2'):
     model = GPT2LMHeadModel.from_pretrained('gpt2')
     
     model = nn.DataParallel(model)
-    model.load_state_dict(torch.load(model_name_or_path))
+    model.load_state_dict(torch.load(model_path))
     model = model.module
     
     model.to(device)
@@ -103,7 +103,7 @@ def model_forward(input_text, conditioning, *model_params, length=-1, top_k=0, t
         
     context_tokens = []
     context_tokens = enc.encode(input_text)
-    context_tokens = [50256, 220] + context_tokens
+    context_tokens = [50256] + context_tokens #removed space token
     
     cond_tokens = []
     for token in conditioning:
