@@ -22,11 +22,11 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
         whether should it check the last symbol of message to have the period etc
     '''
     output = ""
-    types = {'name': ('Alice: ', 'Bob: '),
-            'name-in-par': ('[Alice]: ', '[Bob]: '),
+    types = {'name': ('Alice:', 'Bob:'),
+            #'name-in-par': ('[Alice]:', '[Bob]:'),
             'dash': ('-', '-'),
-            'number': ('1: ', '2: ')}
-    valid_ending = ['.', '!', '?', '\'']
+            'number': ('1:', '2:')}
+    valid_ending = ['.', '!', '?', '\'', '\"']
     
     assert wrap_type in types, "Unknown wrapping"
     
@@ -35,6 +35,7 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
         
     for i, msg in enumerate(m_list):
         output += types[wrap_type][i%2]
+        output += ' '
         output += msg
         if((check_end_punct) and (msg[-1] not in valid_ending)):
             output += '.'
@@ -42,7 +43,15 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
             
     #output += '\n'
     output += types[wrap_type][(i+1)%2]
-    return output
+    
+    conditioning = []
+    if(types[wrap_type][0][-1] == ':'):
+        conditioning.append(types[wrap_type][0][:-1])
+        conditioning.append(types[wrap_type][1][:-1])
+    else:
+        conditioning = list(types[wrap_type])
+    
+    return output, conditioning
 
 def init_model(seed=0, model_name_or_path='gpt2'):
     '''
@@ -53,6 +62,7 @@ def init_model(seed=0, model_name_or_path='gpt2'):
     model_name_or_path : string, optional
         either model name for existing model or path for trained model (not realised yet)
     '''
+def init_model(seed=0, model_name_or_path='gpt2'):
     np.random.seed(seed)
     torch.random.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -95,22 +105,27 @@ def model_forward(input_text, *model_params, length=-1, top_k=0, temperature=1.0
     context_tokens = []
     context_tokens = enc.encode(input_text)
     context_tokens = [50256, 220] + context_tokens
-    print("Input tokens")
+    
+    cond_tokens = []
+    for token in conditioning:
+        cond_tokens += enc.encode(token)
+    print('Detected conditioning tokens:')
+    print(cond_tokens)
+    print("Input tokens:")
     print(context_tokens)
     
     out = sample_sequence(
         model=model, length=length,
-        context=context_tokens,
+        context=context_tokens, cond_tokens=cond_tokens,
         start_token=None,
         batch_size=1,
         temperature=temperature, top_k=top_k, device=device)
 
-    print("Out Tokens") 
+    print("Out Tokens:") 
     print(out)    
     out = out[:, len(context_tokens):].tolist()
     output_text = enc.decode(out[0])
     return output_text
-
     
 def produce_answer(user_input, prev_msgs, *model_params, **wrap_params):
     '''
@@ -126,22 +141,29 @@ def produce_answer(user_input, prev_msgs, *model_params, **wrap_params):
         parametrs for 'wrap_message_list' function like `wrap_type`    
     '''
     prev_msgs.append(user_input)
-    input_text = wrap_message_list(prev_msgs, **wrap_params)
+    input_text, conditioning = wrap_message_list(prev_msgs, **wrap_params)
     print("Model input:\n")
     print(input_text)
-    sampled_answer = model_forward(input_text, *model_params)
+    sampled_answer = model_forward(input_text, conditioning, *model_params)
     print("All sampled:\n")
     print(sampled_answer) 
     print("\n\n")
-    answer = sampled_answer.split('\n')[0] ### If <end of text. -> send ...
-    answer = answer.replace(u'\xa0', u'') ### FIX THIS
+    answer = sampled_answer.split('\n')[0] ### If <end of text> -> send ...
+    answer = answer.replace(u'\xa0', '') ### FIX THIS
+    
+    if(answer[0] == ' '):
+        answer = answer[1:]
+    
     prev_msgs.append(answer)
     return answer
 
 def main():
     model, enc, device = init_model(seed=42)
     messages = []
-    produce_answer("Hi! Do you have any hobbies", messages, model, enc, device, insert_intro=False, wrap_type='name')
+    while(True):
+        print("\n")
+        input_text = input("Enter your message here: ")
+        produce_answer(input_text, messages, model, enc, device, insert_intro=False, wrap_type='name')
 
 if __name__ == '__main__':
     main()
