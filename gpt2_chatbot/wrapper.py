@@ -27,12 +27,13 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
             #'name-in-par': ('[Alice]:', '[Bob]:'),
             'dash': ('-', '-'),
             'number': ('1:', '2:')}
-    valid_ending = ['.', '!', '?', '\'', '\"']
+    valid_ending = ['.', '!', '?']
     
     assert wrap_type in types, "Unknown wrapping"
     
     if(insert_intro):
-        output += "<|endoftext|>"#This is the conversation between 2 people."
+        output += "<|endoftext|>"
+        output += "This is the conversation between 2 people.\n"
         
     for i, msg in enumerate(m_list):
         output += types[wrap_type][i%2]
@@ -45,23 +46,21 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
     #output += '\n'
     output += types[wrap_type][(i+1)%2]
     
-    conditioning = []
     if(types[wrap_type][0][-1] == ':'):
-        conditioning.append(types[wrap_type][0][:-1])
-        conditioning.append(types[wrap_type][1][:-1])
+        conditioning = types[wrap_type][0][:-1]
     else:
-        conditioning = list(types[wrap_type])
+        conditioning = types[wrap_type][0]
     
-    return output, conditioning
+    return output, [conditioning]
 
-def init_model(seed=0, model_name_or_path='gpt2'):
+def init_model(seed=0, model_path='gpt2'):
     '''
     Parameters:
     ----------
     seed : int
         seed number for different ramdomizers
     model_name_or_path : string, optional
-        either model name for existing model or path for trained model (not realised yet)
+        either model name for existing model or path for trained model
     '''
     np.random.seed(seed)
     torch.random.manual_seed(seed)
@@ -73,14 +72,14 @@ def init_model(seed=0, model_name_or_path='gpt2'):
     model = GPT2LMHeadModel.from_pretrained('gpt2')
     
     model = nn.DataParallel(model)
-    model.load_state_dict(torch.load(model_name_or_path))
+    model.load_state_dict(torch.load(model_path))
     model = model.module
     
     model.to(device)
     model.eval()
     return model, enc, device
 
-def model_forward(input_text, conditioning, *model_params, length=-1, top_k=0, temperature=1.0):
+def model_forward(input_text, conditioning, verbose, *model_params, length=128, top_k=10, temperature=1.0):
     '''
     Parameters:
     ----------
@@ -95,7 +94,6 @@ def model_forward(input_text, conditioning, *model_params, length=-1, top_k=0, t
     temperature: float, optional
         parameter of sampling algorithm
     '''
-
     model, enc, device = model_params
     if length == -1:
         length = model.config.n_ctx // 2
@@ -109,10 +107,12 @@ def model_forward(input_text, conditioning, *model_params, length=-1, top_k=0, t
     cond_tokens = []
     for token in conditioning:
         cond_tokens += enc.encode(token)
-    print('Detected conditioning tokens:')
-    print(cond_tokens)
-    print("Input tokens:")
-    print(context_tokens)
+    
+    if(verbose):
+        print('Detected conditioning tokens:')
+        print(cond_tokens)
+        print("Input tokens:")
+        print(context_tokens)
     
     out = sample_sequence(
         model=model, length=length,
@@ -120,14 +120,85 @@ def model_forward(input_text, conditioning, *model_params, length=-1, top_k=0, t
         start_token=None,
         batch_size=1,
         temperature=temperature, top_k=top_k, device=device)
-
-    print("Out Tokens:") 
-    print(out)    
+    
+    if(verbose):
+        print("Out Tokens:") 
+        print(out)    
     out = out[:, len(context_tokens):].tolist()
     output_text = enc.decode(out[0])
     return output_text
+
+def split(string, delimeters):
+    sentences = []
+    prev_end = 0
+    for i in range(1, len(string)):
+        if((string[i-1] in delimeters) & (string[i] not in delimeters)):
+            str_to_append = string[prev_end:i-1].strip() + string[i-1]
+            sentences.append((str_to_append[0].upper() + str_to_append[1:]).replace('¿', ''))
+            prev_end = i
+    str_to_append = string[prev_end:-1].strip() + string[-1]
+    #print("Strting to append:", '\''+str_to_append+'\'')
+    sentences.append((str_to_append[0].upper() + str_to_append[1:]).replace('¿', ''))
+    return sentences
+
+def output_post_processing(input_quote, max_words):
+    '''
+    Parameters:
+    ----------
+    input_quote : string
+        output of model
+    max_words : integer
+        maximal number of words (rounded to the end of sentence with last word) to concatenate to phrase
+    '''
+    valid_endings = ['.', '!', '?', '¿']
+    input_quote = input_quote.replace(u'\xa0', '') # filter out "\xa0" 
+    input_quote = input_quote.replace('\n', ' ') # filter out "\n" 
     
-def produce_answer(user_input, prev_msgs, *model_params, **wrap_params):
+    first_endoftext = input_quote.find('<|endoftext|>') 
+    if(first_endoftext != -1):
+        input_quote = input_quote[:first_endoftext] # cut the string when '<|endoftext|>' found'
+        
+    first_Alice = input_quote.find('Alice:') 
+    if(first_Alice != -1):
+        input_quote = input_quote[:first_Alice] # cut the string when 'Alice:' found'
+
+    input_quote = input_quote.replace("Bob:", '¿') # filter out "Bob: "
+    #print('Partially processed: ')
+    #print(input_quote+'|')
+    
+    sentences = split(input_quote.strip(), valid_endings) # sprit remaining string to sentences according to delimiters
+    
+    #print(sentences)
+    
+    sentences = list(filter(None, sentences)) # filter out empty strings
+    sentences = list(filter(lambda x: x != '¿', sentences))  # filter out empty strings
+    
+    #print(sentences)
+
+    for i, sentence in enumerate(sentences): # add periods where nessecary
+#         for j in range(len(sentence)-1, 1, -1):
+#             if((not sentence[j].isalnum()) & (sentence[j-1].isalnum())):
+#                 left_part = sentence[:j]
+#                 right_part = sentence[j:]
+#                 print("\n\n!!!SPACE BETWEEN PUNCTUATION AND WORDS!!!")
+#                 print("BEFORE:")
+#                 print(left_part, right_part)
+#                 right_part = right_part.replace(' ', '')
+#                 print("AFTER:")
+#                 print(left_part + right_part)
+#                 sentences[i] = left_part + right_part
+#                 break
+        
+        if(sentence[-1] not in valid_endings):
+            sentences[i] += '.'
+    
+    word_counts = [len(s.split(' ')) for s in sentences]
+    word_cum_counts = np.cumsum(np.array(word_counts)) / max_words
+    sentences_to_pass = np.sum(word_cum_counts < 1.0) + 1
+    
+    return " ".join(sentences[:sentences_to_pass])
+    
+def produce_answer(user_input, prev_msgs, max_words, verbose=False, *model_params, **wrap_params):
     '''
     Parameters:
     ----------
@@ -135,6 +206,8 @@ def produce_answer(user_input, prev_msgs, *model_params, **wrap_params):
         user's message
     prev_msgs : list
         list of previous messages in conversation
+    max_words : integer
+        number of words to generate (rounded to the end of last sentence)
     *model_params : tuple
         (model, enc, device) output of 'init_model' function
     **wrap_parameters : dict
@@ -142,17 +215,16 @@ def produce_answer(user_input, prev_msgs, *model_params, **wrap_params):
     '''
     prev_msgs.append(user_input)
     input_text, conditioning = wrap_message_list(prev_msgs, **wrap_params)
-    print("Model input:\n")
-    print(input_text)
-    sampled_answer = model_forward(input_text, conditioning, *model_params)
-    print("All sampled:\n")
-    print(sampled_answer) 
-    print("\n\n")
-    answer = sampled_answer.split('\n')[0] ### If <end of text> -> send ...
-    answer = answer.replace(u'\xa0', '') ### FIX THIS
-    
-    if(answer[0] == ' '):
-        answer = answer[1:]
+    if(verbose):
+        print("Model input:\n")
+        print(input_text)
+    sampled_answer = model_forward(input_text, conditioning, verbose, *model_params)
+    if(verbose):
+        print("All sampled:\n")
+        print(sampled_answer) 
+        print("\n\n")
+        
+    answer = output_post_processing(sampled_answer, max_words)
     
     prev_msgs.append(answer)
     return answer
@@ -163,7 +235,8 @@ def main():
     while(True):
         print("\n")
         input_text = input("Enter your message here: ")
-        produce_answer(input_text, messages, model, enc, device, insert_intro=False, wrap_type='name')
+        output_text = produce_answer(input_text, messages, 30, False, model, enc, device, insert_intro=True, wrap_type='name')
+        print(output_text)
 
 if __name__ == '__main__':
     main()
