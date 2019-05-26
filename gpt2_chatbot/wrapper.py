@@ -33,7 +33,7 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
     
     if(insert_intro):
         #output += "<|endoftext|>"
-        output += "This is the conversation between 2 people.\n"
+        output += "This is a conversation between 2 people.\n"
         
     for i, msg in enumerate(m_list):
         output += types[wrap_type][i%2]
