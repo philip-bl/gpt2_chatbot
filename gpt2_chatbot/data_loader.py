@@ -80,7 +80,7 @@ def get_data_loader(dataset_path, enc, batch_size, args, verbose=True):
     ds = Subset(data, [
         slice(i, i+args.context_length) 
         for i in range(0, len(data) - (len(data) % args.context_length), args.context_length)])
-    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=True)
+    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
     if verbose:
         print(f'loaded {len(data)} tokens, {len(ds)} samples')
         decoded = enc.decode(ds[0])

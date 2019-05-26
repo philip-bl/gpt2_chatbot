@@ -102,7 +102,6 @@ def setup_trainer(model, optimizer, device, data_parallel: bool) -> Engine:
         else:
             # handling of -1 as padding is not implemented
             losses = model(batch, lm_labels=batch)
-            assert losses.shape == (torch.cuda.device_count(), )
             losses.backward(torch.ones_like(losses))
             loss = losses.mean()
         optimizer.step()
