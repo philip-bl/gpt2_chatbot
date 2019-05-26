@@ -32,7 +32,7 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
     assert wrap_type in types, "Unknown wrapping"
     
     if(insert_intro):
-        output += "<|endoftext|>"
+        #output += "<|endoftext|>"
         output += "This is the conversation between 2 people.\n"
         
     for i, msg in enumerate(m_list):
@@ -235,7 +235,7 @@ def main():
     while(True):
         print("\n")
         input_text = input("Enter your message here: ")
-        output_text = produce_answer(input_text, messages, 30, False, model, enc, device, insert_intro=True, wrap_type='name')
+        output_text = produce_answer(input_text, messages, 30, True, model, enc, device, insert_intro=True, wrap_type='name')
         print(output_text)
 
 if __name__ == '__main__':
