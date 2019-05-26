@@ -102,7 +102,7 @@ def model_forward(input_text, conditioning, verbose, *model_params, length=128, 
         
     context_tokens = []
     context_tokens = enc.encode(input_text)
-    context_tokens = [50256, 220] + context_tokens
+    context_tokens = [50256] + context_tokens
     
     cond_tokens = []
     for token in conditioning:
