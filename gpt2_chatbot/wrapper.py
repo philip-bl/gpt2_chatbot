@@ -198,7 +198,7 @@ def output_post_processing(input_quote, max_words):
     
     return " ".join(sentences[:sentences_to_pass])
     
-def produce_answer(user_input, prev_msgs, max_words, verbose=False, *model_params, **wrap_params):
+def produce_answer(user_input, prev_msgs, max_words, top_k=10, temperature=1.0, verbose=False, *model_params, **wrap_params):
     '''
     Parameters:
     ----------
@@ -218,7 +218,7 @@ def produce_answer(user_input, prev_msgs, max_words, verbose=False, *model_param
     if(verbose):
         print("Model input:\n")
         print(input_text)
-    sampled_answer = model_forward(input_text, conditioning, verbose, *model_params)
+    sampled_answer = model_forward(input_text, conditioning, verbose, top_k=top_k, temperature=temperature, *model_params)
     if(verbose):
         print("All sampled:\n")
         print(sampled_answer) 
@@ -235,7 +235,7 @@ def main():
     while(True):
         print("\n")
         input_text = input("Enter your message here: ")
-        output_text = produce_answer(input_text, messages, 30, True, model, enc, device, insert_intro=True, wrap_type='name')
+        output_text = produce_answer(input_text, messages, 30, 10, 1.0, True, model, enc, device, insert_intro=True, wrap_type='name')
         print(output_text)
 
 if __name__ == '__main__':
