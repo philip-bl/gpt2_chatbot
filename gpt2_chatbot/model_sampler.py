@@ -31,7 +31,6 @@ def sample_sequence(model, length, cond_tokens, start_token=None, batch_size=Non
     past = None
     if isinstance(model, nn.DataParallel):
         model = model.module
-    exit_token = False
     with torch.no_grad():
         for i in range(length):
             logits, past = model(prev, past=past)
@@ -42,16 +41,10 @@ def sample_sequence(model, length, cond_tokens, start_token=None, batch_size=Non
                 prev = torch.multinomial(log_probs, num_samples=1)
             else:
                 _, prev = torch.topk(log_probs, k=1, dim=-1)
-            
-            if((prev == 25) & (exit_token)):
-                break
-
             if(prev in cond_tokens):
-                exit_token = True
-            else:
-                exit_token = False
+                break
             output = torch.cat((output, prev), dim=1)
-    return output[:,:-1]
+    return output
 
 def print_samples(model, enc, args, context_tokens=[], unconditional=True, **kwargs):
     print('generating samples')
