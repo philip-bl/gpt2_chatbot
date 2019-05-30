@@ -213,19 +213,31 @@ def produce_answer(user_input, prev_msgs, max_words, top_k=10, temperature=1.0, 
     **wrap_parameters : dict
         parametrs for 'wrap_message_list' function like `wrap_type`    
     '''
+
+
+
     prev_msgs.append(user_input)
     input_text, conditioning = wrap_message_list(prev_msgs, **wrap_params)
+    stop_words = [' asl', ' f ', ' m ',  ' fuck', ' suck', ' dick', ' horny']
     if(verbose):
-        print("Model input:\n")
-        print(input_text)
-    sampled_answer = model_forward(input_text, conditioning, verbose, top_k=top_k, temperature=temperature, *model_params)
-    if(verbose):
-        print("All sampled:\n")
-        print(sampled_answer) 
-        print("\n\n")
-        
-    answer = output_post_processing(sampled_answer, max_words)
-    
+            print("Model input:\n")
+            print(input_text)
+    for _ in range(5):
+        sampled_answer = model_forward(input_text, conditioning, verbose, top_k=top_k, temperature=temperature, *model_params)
+        if(verbose):
+            print("All sampled:\n")
+            print(sampled_answer) 
+            print("\n\n")
+            
+        answer = output_post_processing(sampled_answer, max_words)
+
+        search_list = []
+        for word in stop_words:
+            search_list.append(answer.lower().find(word))
+        # print(search_list)
+        if(np.array(search_list).sum() == -1*len(stop_words)):
+            break
+
     prev_msgs.append(answer)
     return answer
 
