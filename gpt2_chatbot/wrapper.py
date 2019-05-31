@@ -15,10 +15,13 @@ def wrap_message_list(m_list, insert_intro=True, wrap_type='name', check_end_pun
     ----------
     m_list : list
         list of messages in chatbot log 
+
     insert_intro : bool, optional
         whether should it insert the intro about the conversation
+
     wrap_type : string, optional
         type of conditioning to use ('name', 'name-in-par', 'dash', 'number') 
+        
     check_end_punct : bool, optional
         whether should it check the last symbol of message to have the period etc
     '''
@@ -59,6 +62,7 @@ def init_model(seed=0, model_path='gpt2'):
     ----------
     seed : int
         seed number for different ramdomizers
+
     model_name_or_path : string, optional
         either model name for existing model or path for trained model
     '''
@@ -85,12 +89,16 @@ def model_forward(input_text, conditioning, verbose, *model_params, length=128, 
     ----------
     input_text : string
         input text for sampling
+
     *model_params : tuple
         (model, enc, device) output of 'init_model' function
+
     length : int, optional
-        length of generated sample I guess (!!not sure!!)
+        length of generated sample
+
     top_k : int, optional
-        to generate k most probable samples (!!not sure!!)
+        to use k most probable samples
+
     temperature: float, optional
         parameter of sampling algorithm
     '''
@@ -147,6 +155,7 @@ def output_post_processing(input_quote, max_words):
     ----------
     input_quote : string
         output of model
+
     max_words : integer
         maximal number of words (rounded to the end of sentence with last word) to concatenate to phrase
     '''
