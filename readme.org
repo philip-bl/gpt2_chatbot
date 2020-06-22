@@ -1,5 +1,4 @@
 * GPT-2 chatbot
-
 This a chatbot based on GPT-2 we, a team of 3, created during Deep learning 2019 course at
 Skoltech. We fine tuned it on /Cornell movie dialogs corpus/ and /Omegle conversations
 dataset/.
@@ -10,4 +9,7 @@ dataset/.
   report describes two chatbots: generative, and retrieval-based. This repository contains only
   the generative chatbot.
 - See [[./presentation.odp][our presentation]].
-
+** Dialog examples
+[[./dialog_examples.png]]
+** How we used language modelling to create a chatbot
+[[./how_lm_makes_chatbot.png]]
